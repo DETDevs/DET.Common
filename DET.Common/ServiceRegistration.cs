@@ -10,35 +10,59 @@ namespace DET.Common
         public static void AddConfigServices(this IServiceCollection services, string jsonPath = "services.json")
         {
             if (!File.Exists(jsonPath))
-                throw new FileNotFoundException($"El archivo {jsonPath} no fue encontrado.");
-
-            var json = File.ReadAllText(jsonPath);
-            var serviceDefinitions = JsonSerializer.Deserialize<List<ServiceDefinition>>(json);
-
-            foreach (var def in serviceDefinitions)
             {
-                var interfaceType = FindType(def.Interface);
-                var implementationType = FindType(def.Implementation);
+                throw new FileNotFoundException("El archivo " + jsonPath + " no fue encontrado.");
+            }
 
-                if (interfaceType == null || implementationType == null)
-                    throw new Exception($"No se pudo cargar tipo: {def.Interface} o {def.Implementation}");
+            string json = File.ReadAllText(jsonPath);
+            List<ServiceDefinition> list = JsonSerializer.Deserialize<List<ServiceDefinition>>(json);
+            foreach (ServiceDefinition item in list)
+            {
+                Type implementationType = FindType(item.Implementation);
+                if (implementationType == null)
+                {
+                    throw new Exception("No se pudo cargar la implementación: " + item.Implementation);
+                }
 
-                switch (def.Lifetime.ToLower())
+                Type interfaceType = null;
+                if (!string.IsNullOrWhiteSpace(item.Interface))
+                {
+                    interfaceType = FindType(item.Interface);
+                    if (interfaceType == null)
+                    {
+                        throw new Exception("No se pudo cargar la interfaz: " + item.Interface);
+                    }
+                }
+
+                switch (item.Lifetime.ToLower())
                 {
                     case "singleton":
-                        services.AddSingleton(interfaceType, implementationType);
+                        if (interfaceType != null)
+                            services.AddSingleton(interfaceType, implementationType);
+                        else
+                            services.AddSingleton(implementationType);
                         break;
+
                     case "scoped":
-                        services.AddScoped(interfaceType, implementationType);
+                        if (interfaceType != null)
+                            services.AddScoped(interfaceType, implementationType);
+                        else
+                            services.AddScoped(implementationType);
                         break;
+
                     case "transient":
-                        services.AddTransient(interfaceType, implementationType);
+                        if (interfaceType != null)
+                            services.AddTransient(interfaceType, implementationType);
+                        else
+                            services.AddTransient(implementationType);
                         break;
+
                     default:
-                        throw new Exception($"Lifetime no soportado: {def.Lifetime}");
+                        throw new Exception("Lifetime no soportado: " + item.Lifetime);
                 }
             }
         }
+
 
         private static Type? FindType(string fullTypeName)
         {
