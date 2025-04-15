@@ -68,20 +68,7 @@ namespace DET.Common
         {
             Console.WriteLine($"[INFO] Buscando tipo: {fullTypeName}");
 
-            // Buscar en los ensamblados ya cargados
-            var type = AppDomain.CurrentDomain
-                .GetAssemblies()
-                .SelectMany(a => a.GetTypes())
-                .FirstOrDefault(t => t.FullName == fullTypeName);
-
-            Console.WriteLine(type != null
-                ? $"[OK] Tipo encontrado en ensamblados cargados: {type.FullName}"
-                : $"[WARN] Tipo NO encontrado en ensamblados cargados. Intentando cargar manualmente...");
-
-            if (type != null)
-                return type;
-
-            // Intentar cargar manualmente otros ensamblados del directorio
+            // 1. Cargar todos los ensamblados posibles antes de buscar
             var loadedAssemblyNames = AppDomain.CurrentDomain
                 .GetAssemblies()
                 .Select(a => a.GetName().FullName)
@@ -92,16 +79,10 @@ namespace DET.Common
                 try
                 {
                     var assemblyName = AssemblyName.GetAssemblyName(dll);
-                    if (loadedAssemblyNames.Contains(assemblyName.FullName))
-                        continue;
-
-                    var assembly = Assembly.Load(assemblyName);
-                    type = assembly.GetType(fullTypeName);
-
-                    if (type != null)
+                    if (!loadedAssemblyNames.Contains(assemblyName.FullName))
                     {
-                        Console.WriteLine($"[OK] Tipo encontrado después de cargar: {type.FullName}");
-                        return type;
+                        Assembly.Load(assemblyName);
+                        Console.WriteLine($"[INFO] Ensamblado cargado: {assemblyName.Name}");
                     }
                 }
                 catch (Exception ex)
@@ -110,8 +91,25 @@ namespace DET.Common
                 }
             }
 
-            Console.WriteLine($"[FAIL] Tipo {fullTypeName} no encontrado en ningún ensamblado.");
+            // 2. Ahora que todos están cargados, buscar el tipo
+            var type = AppDomain.CurrentDomain
+                .GetAssemblies()
+                .SelectMany(a =>
+                {
+                    try { return a.GetTypes(); }
+                    catch { return Array.Empty<Type>(); } // Ignora ensamblados que no puedan leerse
+                })
+                .FirstOrDefault(t => t.FullName == fullTypeName);
+
+            if (type != null)
+            {
+                Console.WriteLine($"[OK] Tipo encontrado: {type.FullName}");
+                return type;
+            }
+
+            Console.WriteLine($"[FAIL] Tipo {fullTypeName} no encontrado.");
             return null;
         }
+
     }
 }
